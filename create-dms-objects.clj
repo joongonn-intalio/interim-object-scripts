@@ -20,7 +20,7 @@
 (create-io-object "document"
                   ;Attributes
                   {:name 'string
-                   ;related-to ; ?
+                   ;related-to ; see below
                    :status 'option-list
                    :subjects 'option-list ; text[]
                    :description 'text
@@ -44,7 +44,8 @@
                    :documentation 'code
                    :notes 'text}
                   ;Relationships
-                  {:document-publisher ['referential 'publisher 'user]
+                  {:document-related-to ['referential 'related-object 'object]
+                   :document-publisher ['referential 'publisher 'user]
                    :document-contributors ['multiple '- 'user] ; Note: There is no related-field for N-N
                    :document-source ['referential 'source 'document]
                    ;:document-languages ['multiple '- 'language] ; 'Language object not available yet
