@@ -3,13 +3,13 @@
 (require 'objects-db)
 (require 'objects-sql)
 
-(defn insert-object [namespace-uuid identifier]
+(defn insert-object [namespace-uuid identifier datastore]
   (let [new-record-uuid (UUID/nameUUIDFromBytes (.getBytes (str "io_" identifier)))]
     (add-object! {:io_uuid new-record-uuid
                  :io_identifier identifier}); Side effect here
     (to-sql-insert "io_object" {:io_namespace namespace-uuid
                                 :io_uuid new-record-uuid
-                                :io_datastore "{sql}"
+                                :io_datastore datastore
                                 :io_identifier identifier
                                 :io_name identifier
                                 :io_status "{published}"})))
@@ -65,14 +65,17 @@
            (replace-char \- \_ rel-fields-decl)    
            ");"))))
 
-(defn create-io-object [identifier fields relations]
+(defn create-io-object [identifier fields relations datastore]
   (let [the-namespace-uuid (:io_uuid (get-namespace "io"))]
-    (println (insert-object the-namespace-uuid identifier)) ;Side effect here of adding in new object to memory
+    (println (insert-object the-namespace-uuid identifier datastore)) ;Side effect here of adding in new object to memory
     (println (create-io-object-table identifier fields relations))
     (let [the-obj-uuid (:io_uuid (get-io-object-by-identifier identifier))]
       ; 'Normal attirbutes' - create rel_io_object_fields records here
-      (doseq [[identifier data-type] fields]
-        (let [field (get-io-field identifier data-type)]
+      (doseq [[identifier datatype-or-field-uuid] fields]
+        ; quick hack here - data-type-can be UUID of io-field!!!!
+        (let [field (if (instance? UUID datatype-or-field-uuid)
+                      (get-io-field-by-uuid datatype-or-field-uuid)
+                      (get-io-field identifier datatype-or-field-uuid))]
           (println (insert-object-field-relation the-namespace-uuid the-obj-uuid (:io_uuid field)))))
       ; 'Relationships' - create io_relationship (including rel_io_object_fields for 'referential and 'parental) records here
       (doseq [[rel-identifier [type field-identifier object-identifier]] relations]
@@ -96,16 +99,50 @@
                                       type))
          true (throw (IllegalArgumentException. (str "Do not know how to handle relationship - " type))))))))
 
-(defn insert-io-field! [identifier datatype] ; Should not need to use this unless we have fancifully named fields for the type we are creating
+(defn io-field-exists? [identifier datatype]
+  (try (get-io-field identifier datatype)
+       true
+       (catch Exception _
+         false)))
+  
+(defn _insert-io-field! [identifier datatype check]
+  (if (and check (io-field-exists? identifier datatype)) (throw (IllegalArgumentException. (str "io_field " identifier ":" datatype " already exists."))))
   (let [new-record-uuid (UUID/randomUUID)
         datatype-uuid (:io_uuid (get-io-datatype datatype))]
     (add-io-field! {:io_uuid new-record-uuid
                     :io_datatype datatype-uuid
                     :io_identifier (str identifier)}) ; SIDE EFFECT!
-    (to-sql-insert "io_field" {:io_uuid new-record-uuid
+    {:uuid new-record-uuid
+     :sql (to-sql-insert "io_field" {:io_uuid new-record-uuid
                                :io_active true
                                :io_datatype datatype-uuid
                                :io_identifier identifier
                                :io_name identifier
-                               :io_namespace (:io_uuid (get-namespace 'io))})))
+                               :io_namespace (:io_uuid (get-namespace 'io))})}))
 
+(defn insert-io-field! [identifier datatype] (:sql (_insert-io-field! identifier datatype true)))
+(defn force-insert-io-field! [identifier datatype] (_insert-io-field! identifier datatype false))
+
+(defn create-io-field-option [io-field-uuid
+                              identifier
+                              datatype-option-identifier
+                              datatype-option-related-datatype-identifier
+                              value] ; handles creating rel_io_field_option association
+  (let [namespace-uuid (:io_uuid (get-namespace "io"))
+        new-record-uuid (UUID/randomUUID)
+        datatype-option (get-io-datatype-option datatype-option-identifier datatype-option-related-datatype-identifier)
+        insert-io-field-option-sql (to-sql-insert "io_field_option" {:io_uuid new-record-uuid
+                                                                     :io_active true
+                                                                     :io_datatype_option (:io_uuid datatype-option)
+                                                                     :io_identifier identifier
+                                                                     :io_name identifier
+                                                                     :io_namespace namespace-uuid
+                                                                     :io_value value})
+        insert-rel-io-field-options-sql (to-sql-insert "rel_io_field_options" {:io_uuid (UUID/randomUUID)
+                                                                               :io_source_record io-field-uuid
+                                                                               :io_target_record new-record-uuid})]
+    (println insert-io-field-option-sql)
+    (println insert-rel-io-field-options-sql)))
+
+
+;(println (create-io-field-option "uid 1231 1231" 'status-options-list-options 'options 'option-list "{{1} {Something}}"))

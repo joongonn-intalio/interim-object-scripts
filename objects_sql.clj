@@ -1,7 +1,7 @@
 (import 'java.util.UUID)
 (use '[clojure.contrib.string :only (as-str join)])
 
-(defn to-sql-insert [table-name field-values]
+(defn to-sql-insert [table-name field-values] ;FIXME: should handle escape quotes
   (letfn [(instance-in? [col val] (some (fn [c] (instance? c val)) col)) 
           (quote-value [val]
             (cond
