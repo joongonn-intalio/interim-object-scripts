@@ -3,8 +3,6 @@
 (use '[clojure.contrib.string :only (as-str)])
 (import 'java.util.UUID)
 
-(def UUID-ADMIN (UUID/fromString "e6bf32c9-bdf0-33c8-8f4a-2390e174127d"))
-
 (let [props (read-properties "db.properties")
       config (into {} (for [[k v] props] [(keyword k) v]))
       db-host (:db-host config)

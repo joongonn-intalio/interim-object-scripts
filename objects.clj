@@ -127,22 +127,27 @@
                               identifier
                               datatype-option-identifier
                               datatype-option-related-datatype-identifier
-                              value] ; handles creating rel_io_field_option association
-  (let [namespace-uuid (:io_uuid (get-namespace "io"))
-        new-record-uuid (UUID/randomUUID)
-        datatype-option (get-io-datatype-option datatype-option-identifier datatype-option-related-datatype-identifier)
-        insert-io-field-option-sql (to-sql-insert "io_field_option" {:io_uuid new-record-uuid
-                                                                     :io_active true
-                                                                     :io_datatype_option (:io_uuid datatype-option)
-                                                                     :io_identifier identifier
-                                                                     :io_name identifier
-                                                                     :io_namespace namespace-uuid
-                                                                     :io_value value})
-        insert-rel-io-field-options-sql (to-sql-insert "rel_io_field_options" {:io_uuid (UUID/randomUUID)
-                                                                               :io_source_record io-field-uuid
-                                                                               :io_target_record new-record-uuid})]
-    (println insert-io-field-option-sql)
-    (println insert-rel-io-field-options-sql)))
+                              value-map] ; handles creating rel_io_field_option association
+  
+  (letfn [(to-option-list-value [options]
+            (str "{"
+                 (join "," (map (fn [[k v]] (as-str "{" k "},{" v "}")) options))
+                 "}"))]
+    (let [namespace-uuid (:io_uuid (get-namespace "io"))
+          new-record-uuid (UUID/randomUUID)
+          datatype-option (get-io-datatype-option datatype-option-identifier datatype-option-related-datatype-identifier)
+          insert-io-field-option-sql (to-sql-insert "io_field_option" {:io_uuid new-record-uuid
+                                                                       :io_active true
+                                                                       :io_datatype_option (:io_uuid datatype-option)
+                                                                       :io_identifier identifier
+                                                                       :io_name identifier
+                                                                       :io_namespace namespace-uuid
+                                                                       :io_value (to-option-list-value value-map)})
+          insert-rel-io-field-options-sql (to-sql-insert "rel_io_field_options" {:io_uuid (UUID/randomUUID)
+                                                                                 :io_source_record io-field-uuid
+                                                                                 :io_target_record new-record-uuid})]
+      (println insert-io-field-option-sql)
+      (println insert-rel-io-field-options-sql))))
 
 
 ;(println (create-io-field-option "uid 1231 1231" 'status-options-list-options 'options 'option-list "{{1} {Something}}"))

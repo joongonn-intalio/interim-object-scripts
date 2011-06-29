@@ -12,8 +12,3 @@
          "(" (join ", " (map as-str (keys field-values))) ") "
          "VALUES "
          "(" (join ", " (map quote-value (vals field-values))) ");")))
-
-
-;(println (to-sql-insert "io_object" {:io_identifier "document"
-;                                     :uuid2 (UUID/randomUUID)
-;                                     :io_uuid 1231}))
