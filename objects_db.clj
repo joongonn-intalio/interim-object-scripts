@@ -1,6 +1,7 @@
 (use 'clojure.contrib.sql)
 (use '[clojure.contrib.properties :only (read-properties)])
 (use '[clojure.contrib.string :only (as-str)])
+(use '[clojure.set :only (intersection)])
 (import 'java.util.UUID)
 
 (let [props (read-properties "db.properties")
@@ -36,6 +37,19 @@
 
 (def IO-FIELDS (with-connection db
                   (with-query-results rs ["SELECT * FROM io_field"]
+                    (let [fields (transient [])]
+                      (doseq [r rs] (conj! fields r))
+                      (persistent! fields)))))
+
+(def REL-IO-OBJECT-FIELDS (with-connection db
+                  (with-query-results rs ["SELECT * FROM rel_io_object_fields"]
+                    (let [rel_obj_fields (transient [])]
+                      (doseq [r rs] (conj! rel_obj_fields r))
+                      (persistent! rel_obj_fields)))))
+
+
+(def IO-CONTROL-TYPES (with-connection db
+                  (with-query-results rs ["SELECT * FROM io_control_type"]
                     (let [fields (transient [])]
                       (doseq [r rs] (conj! fields r))
                       (persistent! fields)))))
@@ -105,6 +119,31 @@
       (throw-error "io_datatype_option" {:identifier identifier
                                          :related-datatype-identifier related-datatype-identifier})
       datatype-option)))
+
+(defn get-io-control-type-by-identifier [identifier]
+  (let [control-type (first (filter (fn [m] (= (str identifier) (:io_identifier m))) IO-CONTROL-TYPES))]
+    (if (nil? control-type)
+      (throw-error "io_control_type" {:identifier identifier})
+      control-type)))
+
+; refactor this, for fun when free
+(defn get-io-field-for-object [object-identifier identifier datatype]
+  (let [object (get-io-object-by-identifier object-identifier)
+        object-uuid (:io_uuid object)
+        object-fields (filter (fn [rel] (= (str object-uuid) (str (:io_source_record rel)))) REL-IO-OBJECT-FIELDS)
+        fields (filter (fn [m] (and (= (as-str identifier) (:io_identifier m)) ;; all fields matching identifier & type
+                                    (= (:io_uuid (get-io-datatype datatype)) (:io_datatype m))))
+                       IO-FIELDS)
+        field fields
+        object-fields-uuids (set (map #(:io_target_record %) object-fields))
+        field-uuids (set (map #(:io_uuid %) fields))
+        target-io-field-uuids (intersection object-fields-uuids field-uuids) ; should throw exceptions if more than one match
+        field (get-io-field-by-uuid (first target-io-field-uuids))] 
+    (if (nil? field)
+      (throw-error "io_field" {:object-identifier object-identifier :identifier (as-str identifier) :datatype datatype})
+      field)))
+
+;(println (get-io-field 'document 'status 'option-list))
 
 ;(println (get-io-object-by-identifier 'task))
 ;(println (get-io-object-by-uuid "db13a9ad-2494-34bb-8a59-cb99fd308051"))

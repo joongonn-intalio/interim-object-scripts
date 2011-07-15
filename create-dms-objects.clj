@@ -3,22 +3,28 @@
 ;################################################################
 ; Create 'document' object
 ;################################################################
-; These fields are NOT available yet (in bootstrap payloads), so we create them
-(println (insert-io-field! 'subjects 'text))
+
+;######## CONSTRUCT NON SHARED FIELDS ########
+(def insert-document-related-to (force-insert-io-field! 'related-to 'relationship))
+(println (:sql insert-document-related-to))
+
+(def insert-document-name (force-insert-io-field! 'name 'string))
+(println (:sql insert-document-name))
+
+; This series of inserts will crash if similarly named fields exist in database, so guarantees non shared
+(println (insert-io-field! 'subjects 'text)) 
 (println (insert-io-field! 'coverage 'text))
 (println (insert-io-field! 'valid-on 'timestamp)) 
 (println (insert-io-field! 'expired-on 'timestamp)) 
 (println (insert-io-field! 'documentation 'code))
-(println (insert-io-field! 'published-on 'timestamp)) ; we have published:boolean
+(println (insert-io-field! 'published-on 'timestamp))
 (println (insert-io-field! 'licenses 'string))
 (println (insert-io-field! 'format 'string))
 (println (insert-io-field! 'publisher 'relationship))
 (println (insert-io-field! 'source 'relationship))
 (println (insert-io-field! 'dmsfolder 'relationship))
-(println (insert-io-field! 'related-to 'relationship)) ; we have a similar 'related-object
 
-; construct Document 'status options
-(def insert-document-status-io-field (force-insert-io-field! 'status 'option-list)) ; there are other similarly named 'status fields
+(def insert-document-status-io-field (force-insert-io-field! 'status 'option-list)) ; there exists other "status" fields
 (println (:sql insert-document-status-io-field))
 (create-io-field-option (:uuid insert-document-status-io-field)
                         "document_status_option-list_options"
@@ -48,23 +54,25 @@
                          :11 "still_image"
                          :12 "text"})
 
+
+
 (create-io-object "document"
                   ;Attributes (fields are 'searched' by name & type in io_fields and assigned automatically)
-                  {:name 'string
-                   :status (:uuid insert-document-status-io-field) ; Note: hack here to allow passing in UUID of io_field in concern
-                   :subjects 'text ; TODO: should be text[]
+                  {:name (:uuid insert-document-name) ;NS
+                   :status (:uuid insert-document-status-io-field);NS
+                   :subjects 'text ;NS TODO: should be text[]
                    :description 'text
-                   :format 'string
-                   :licenses 'string
-                   :type (:uuid insert-document-type-io-field) ; DCMI list of types
-                   :coverage 'text ; TODO: should be text[]
-                   :published-on 'timestamp
-                   :valid-on 'timestamp
-                   :expired-on 'timestamp
+                   :format 'string ;NS
+                   :licenses 'string ;NS
+                   :type (:uuid insert-document-type-io-field) ;NS DCMI list of types
+                   :coverage 'text ;NS TODO: should be text[]
+                   :published-on 'timestamp ;NS
+                   :valid-on 'timestamp ;NS
+                   :expired-on 'timestamp ;NS
                    :uuid 'uuid
-                   ;path 'path ; ;TODO: when path datatype is ready
-                   :application 'relationship ; tbc
-                   :package 'relationship ; tbc
+                   ;path 'path ; FIXME:
+                   :application 'relationship
+                   :package 'relationship
                    :tags 'text
                    :created-on 'timestamp
                    :updated-on 'timestamp
@@ -74,11 +82,11 @@
                    :documentation 'code
                    :notes 'text}
                   ;Relationships
-                  {:document-related-to ['referential 'related-to 'object]
-                   :document-publisher ['referential 'publisher 'user]
-                   :document-contributors ['multiple '- 'user] ; Note: There is no related-field for N-N
-                   :document-source ['referential 'source 'document]
-                   ;document-languages ['multiple '- 'language] ; FIXME: How to model N-N languages? or should this be a field
+                  {:document-related-to ['referential (:uuid insert-document-related-to) 'object] ;NS
+                   :document-publisher ['referential 'publisher 'user] ;NS
+                   :document-contributors ['multiple '- 'user] ; NS
+                   :document-source ['referential 'source 'document]; NS
+                   ;document-languages ['multiple '- 'language]
                    :document-dmsfolder ['referential 'dmsfolder 'dmsfolder]
                    :document-owner ['referential 'owner 'user]
                    :document-created-by ['referential 'created-by 'user]
@@ -87,16 +95,39 @@
                   "{sql}")
 
 
+
+
 ;################################################################
 ; Create 'version' object - this should be in NoSQL though
 ;################################################################
-(println (insert-io-field! 'file 'file)) ; WARN: 'file is currently defined as 'text in database
+(def insert-version-file (force-insert-io-field! 'file 'file))
+(println (:sql insert-version-file))
+
+(def insert-version-name (force-insert-io-field! 'name 'string))
+(println (:sql insert-version-name))
+
+(def insert-version-label (force-insert-io-field! 'label 'string))
+(println (:sql insert-version-label))
+
+(def insert-version-content (force-insert-io-field! 'content 'text))
+(println (:sql insert-version-content))
+
+(def insert-version-size (force-insert-io-field! 'size 'file-size))
+(println (:sql insert-version-size))
+
+(def insert-version-related-object (force-insert-io-field! 'related-object 'relationship))
+(println (:sql insert-version-related-object))
+
+(def insert-version-related-record (force-insert-io-field! 'related-record 'relationship))
+(println (:sql insert-version-related-record))
+
+; NON SHARED FIELDS
 (println (insert-io-field! 'file-name 'string))
 (println (insert-io-field! 'encoding 'string))
 (println (insert-io-field! 'major 'boolean))
 (println (insert-io-field! 'number 'integer))
 (println (insert-io-field! 'branch 'relationship))
-(println (insert-io-field! 'related-record 'relationship))
+
 
 ; construct Version 'status options
 (def insert-version-type-io-field (force-insert-io-field! 'type 'option-list)) ; there are other similarly named 'status fields
@@ -110,22 +141,23 @@
 
 (create-io-object "version"
                   ;Attributes
-                  {:name 'string
-                   :number 'integer
-                   :label 'string
-                   :description 'text
-                   :major 'boolean
+                  {:name (:uuid insert-version-name) ;NS
+                   :number 'integer ;NS
+                   :label (:uuid insert-version-label) ;NS
+                   :major 'boolean ;NS
                    :type (:uuid insert-version-type-io-field)
-                   :content 'text
-                   :file 'file ; WARN: 'file is currently defined as 'text in database
-                   :file-name 'string
-                   :encoding 'string
-                   :size 'file-size
+                   :content (:uuid insert-version-content) ;NS
+                   :file (:uuid insert-version-file) ;NS
+                   :file-name 'string ;NS
+                   :encoding 'string ;NS
+                   :size (:uuid insert-version-size) ;NS
                    :uuid 'uuid
-                   :created-on 'timestamp}
+                   :created-on 'timestamp
+                   :deleted 'boolean} ;WARN: code changes require this?!
                   ;Relationships
-                  {:version-related-record ['referential 'related-record 'object]
-                   :version-branch ['referential 'branch 'version]
+                  {:version-related-object ['referential (:uuid insert-version-related-object) 'object] ;NS
+                   :version-related-record ['referential (:uuid insert-version-related-record) 'object] ;NS
+                   :version-branch ['referential 'branch 'version] ;NS
                    ;version-media-type ['referential 'media-type 'media-type] ; Media type not ready yet
                    :version-created-by ['referential 'created-by 'user]
                    }
@@ -137,4 +169,4 @@
 ; whereas for io_created_by => these fields has a io_relationship associated?
 ;NOTE: io_fields can be 'shared' by io_objects (in rel_io_object_fields)
 ;package and application 1-N, but does not show up in io_relationship linkages? eg. for io_task?
-
+;Observation: latest Exporter exports io_field name="null" if the name field in io_field is not speciifed in the database (whereas old exporter exports name as uuid?)

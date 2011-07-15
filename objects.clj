@@ -21,9 +21,11 @@
                                             :io_source_record source-uuid
                                             :io_target_record target-uuid})))
 
-(defn insert-referential-or-parental-relation [identifier namespace-uuid related-field-identifier source-uuid target-object-identifier type]
+(defn insert-referential-or-parental-relation [identifier namespace-uuid related-field-identifier-or-uuid source-uuid target-object-identifier type]
   (let [new-record-uuid (UUID/randomUUID)
-        related-field (get-io-field related-field-identifier 'relationship)
+        related-field (if (instance? UUID related-field-identifier-or-uuid)
+                                        (get-io-field-by-uuid related-field-identifier-or-uuid) ; NON SHARED
+                                        (get-io-field related-field-identifier-or-uuid 'relationship)) ; SHARED
         target-object (get-io-object-by-identifier target-object-identifier)]
     (to-sql-insert "io_relationship" {:io_uuid new-record-uuid
                                       :io_active true
@@ -47,7 +49,11 @@
                                       :io_type (str "{" type "}")})))
 
 (defn create-io-object-table [io_identifier fields relations]
-  (letfn [(remove-multiple-relation [relations]
+  (letfn [(translate-related-field [related-field]
+            (if (instance? UUID related-field)
+                      (:io_identifier (get-io-field-by-uuid related-field))
+                      related-field))
+          (remove-multiple-relation [relations]
             (filter (fn [[_ [type %]]] (not= type 'multiple)) relations))
           (to-sql-type [datatype-identifier]
             (:io_database_type (get-io-datatype datatype-identifier)))
@@ -56,7 +62,7 @@
           (to-fields-decl [fields]
             (join ", " (map to-field-decl fields)))
           (to-rel-fields-decl [fields]
-            (join ", " (map (fn [[k [type related-field target-object-identifier]]] (str "io_" (str related-field) " uuid")) fields)))]
+            (join ", " (map (fn [[k [type related-field target-object-identifier]]] (str "io_" (str (translate-related-field related-field)) " uuid")) fields)))]
     (let [fields-decl (to-fields-decl fields)
           rel-fields-decl (to-rel-fields-decl (remove-multiple-relation relations))]
       (str "CREATE TABLE io_" (str io_identifier) "("
@@ -78,26 +84,30 @@
                       (get-io-field identifier datatype-or-field-uuid))]
           (println (insert-object-field-relation the-namespace-uuid the-obj-uuid (:io_uuid field)))))
       ; 'Relationships' - create io_relationship (including rel_io_object_fields for 'referential and 'parental) records here
-      (doseq [[rel-identifier [type field-identifier object-identifier]] relations]
-        (cond
-         (contains? #{'referential, 'parental} type) (do
-                                                       (println (insert-referential-or-parental-relation
-                                                                 rel-identifier
-                                                                 the-namespace-uuid
-                                                                 field-identifier
-                                                                 the-obj-uuid
-                                                                 object-identifier type))
-                                                       (println (insert-object-field-relation
-                                                                 the-namespace-uuid
-                                                                 the-obj-uuid
-                                                                 (:io_uuid (get-io-field field-identifier 'relationship)))))
-         (= type 'multiple) (println (insert-multiple-relation
-                                      rel-identifier
-                                      the-namespace-uuid
-                                      the-obj-uuid
-                                      object-identifier
-                                      type))
-         true (throw (IllegalArgumentException. (str "Do not know how to handle relationship - " type))))))))
+      (doseq [[rel-identifier [type field-identifier-or-uuid object-identifier]] relations]
+          (cond
+           (contains? #{'referential, 'parental} type) (do
+                                                         (let [the-related-field (if (instance? UUID field-identifier-or-uuid)
+                                                                                   (get-io-field-by-uuid field-identifier-or-uuid) ; NOT SHARED
+                                                                                   (get-io-field field-identifier-or-uuid 'relationship))] ; SHARED
+                                                           (println (insert-referential-or-parental-relation
+                                                                     rel-identifier
+                                                                     the-namespace-uuid
+                                                                     field-identifier-or-uuid
+                                                                     the-obj-uuid
+                                                                     object-identifier
+                                                                     type))
+                                                           (println (insert-object-field-relation
+                                                                     the-namespace-uuid
+                                                                     the-obj-uuid
+                                                                     (:io_uuid the-related-field))))) ; FIXME: this one
+           (= type 'multiple) (println (insert-multiple-relation
+                                        rel-identifier
+                                        the-namespace-uuid
+                                        the-obj-uuid
+                                        object-identifier
+                                        type))
+           true (throw (IllegalArgumentException. (str "Do not know how to handle relationship - " type))))))))
 
 (defn io-field-exists? [identifier datatype]
   (try (get-io-field identifier datatype)
